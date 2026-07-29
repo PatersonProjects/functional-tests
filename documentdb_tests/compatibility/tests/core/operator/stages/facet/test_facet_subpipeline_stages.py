@@ -228,6 +228,58 @@ FACET_SUBPIPELINE_STAGE_TESTS: list[StageTestCase] = [
         msg="$replaceRoot sub-pipeline should replace the document root",
     ),
     StageTestCase(
+        id="set",
+        docs=DOCS,
+        pipeline=[
+            {
+                "$facet": {
+                    "withSet": [
+                        {"$match": {"_id": 1}},
+                        {"$set": {"doubled": {"$multiply": ["$price", 2]}}},
+                        {"$project": {"_id": 1, "doubled": 1}},
+                    ],
+                    "total": [{"$count": "n"}],
+                }
+            }
+        ],
+        expected=[{"withSet": [{"_id": 1, "doubled": 20}], "total": [{"n": 4}]}],
+        msg="$set sub-pipeline should add the computed field",
+    ),
+    StageTestCase(
+        id="unset",
+        docs=DOCS,
+        pipeline=[
+            {
+                "$facet": {
+                    "withoutPrice": [
+                        {"$match": {"_id": 1}},
+                        {"$unset": ["price", "tags", "cat"]},
+                    ],
+                    "total": [{"$count": "n"}],
+                }
+            }
+        ],
+        expected=[{"withoutPrice": [{"_id": 1}], "total": [{"n": 4}]}],
+        msg="$unset sub-pipeline should remove the named fields",
+    ),
+    StageTestCase(
+        id="replaceWith",
+        docs=DOCS,
+        pipeline=[
+            {
+                "$facet": {
+                    "replaced": [
+                        {"$match": {"_id": 1}},
+                        {"$replaceWith": {"only": "$cat"}},
+                    ],
+                    "total": [{"$count": "n"}],
+                }
+            }
+        ],
+        expected=[{"replaced": [{"only": "A"}], "total": [{"n": 4}]}],
+        msg="$replaceWith sub-pipeline should replace the document root",
+    ),
+    StageTestCase(
         id="multiple_chained_stages",
         docs=DOCS,
         pipeline=[

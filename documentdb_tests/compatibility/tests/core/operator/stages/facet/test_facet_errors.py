@@ -30,6 +30,7 @@ from documentdb_tests.framework.error_codes import (
     LIMIT_NOT_POSITIVE_ERROR,
     LOOKUP_SUB_PIPELINE_NOT_ALLOWED_ERROR,
     PIPELINE_STAGE_EXTRA_FIELD_ERROR,
+    UNION_WITH_SUB_PIPELINE_NOT_ALLOWED_ERROR,
     UNKNOWN_PIPELINE_STAGE_ERROR,
 )
 from documentdb_tests.framework.executor import execute_command
@@ -548,6 +549,78 @@ FACET_LOOKUP_PIPELINE_FORBIDDEN_STAGE_TESTS: list[StageTestCase] = [
 ]
 
 
+# Property [UnionWith Pipeline Forbidden Stages]: the $facet restriction also
+# reaches through a $unionWith sub-pipeline nested inside a $facet sub-pipeline,
+# the same way it reaches through $lookup above. $out is caught earlier by
+# $unionWith's own restriction, which is a different contract and is asserted as
+# such.
+FACET_UNIONWITH_PIPELINE_FORBIDDEN_STAGE_TESTS: list[StageTestCase] = [
+    StageTestCase(
+        id="indexStats_in_unionWith_pipeline",
+        docs=DOCS,
+        pipeline=[
+            {
+                "$facet": {
+                    "a": [
+                        {
+                            "$unionWith": {
+                                "coll": "_facet_test_union",
+                                "pipeline": [{"$indexStats": {}}],
+                            }
+                        }
+                    ],
+                    "total": [{"$count": "n"}],
+                }
+            }
+        ],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$indexStats inside a $unionWith pipeline within $facet should be rejected",
+    ),
+    StageTestCase(
+        id="nested_facet_in_unionWith_pipeline",
+        docs=DOCS,
+        pipeline=[
+            {
+                "$facet": {
+                    "a": [
+                        {
+                            "$unionWith": {
+                                "coll": "_facet_test_union",
+                                "pipeline": [{"$facet": {"b": [{"$count": "n"}]}}],
+                            }
+                        }
+                    ],
+                    "total": [{"$count": "n"}],
+                }
+            }
+        ],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$facet inside a $unionWith pipeline within $facet should be rejected",
+    ),
+    StageTestCase(
+        id="out_in_unionWith_pipeline",
+        docs=DOCS,
+        pipeline=[
+            {
+                "$facet": {
+                    "a": [
+                        {
+                            "$unionWith": {
+                                "coll": "_facet_test_union",
+                                "pipeline": [{"$out": "outcoll"}],
+                            }
+                        }
+                    ],
+                    "total": [{"$count": "n"}],
+                }
+            }
+        ],
+        error_code=UNION_WITH_SUB_PIPELINE_NOT_ALLOWED_ERROR,
+        msg="$out inside a $unionWith pipeline within $facet should be rejected",
+    ),
+]
+
+
 # Property [Sub-Pipeline Independence]: a runtime error in any sub-pipeline fails
 # the whole $facet stage.
 INDEPENDENCE_DOCS = [
@@ -603,6 +676,7 @@ FACET_ERROR_TESTS = (
     + FACET_BOUNDARY_ERROR_TESTS
     + FACET_FORBIDDEN_STAGE_TESTS
     + FACET_LOOKUP_PIPELINE_FORBIDDEN_STAGE_TESTS
+    + FACET_UNIONWITH_PIPELINE_FORBIDDEN_STAGE_TESTS
     + FACET_INDEPENDENCE_ERROR_TESTS
     + FACET_SIZE_LIMIT_ERROR_TESTS
 )
