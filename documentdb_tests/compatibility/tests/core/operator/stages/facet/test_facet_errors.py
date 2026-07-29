@@ -34,6 +34,7 @@ from documentdb_tests.framework.error_codes import (
 )
 from documentdb_tests.framework.executor import execute_command
 from documentdb_tests.framework.parametrize import pytest_params
+from documentdb_tests.framework.target_collection import ExistingDatabase
 
 # Documents used by the argument, forbidden-stage, and independence error cases.
 DOCS = [{"_id": 1, "cat": "A"}, {"_id": 2, "cat": "B"}]
@@ -322,6 +323,41 @@ FACET_FORBIDDEN_STAGE_TESTS: list[StageTestCase] = [
         pipeline=[{"$facet": {"a": [{"$listSessions": {}}]}}],
         error_code=INVALID_NAMESPACE_ERROR,
         msg="$listSessions inside a $facet sub-pipeline should be rejected with 73",
+    ),
+    # $documents is collectionless-only, so at collection scope it is rejected
+    # for the $facet restriction rather than the namespace error it raises as a
+    # top-level stage against a collection.
+    StageTestCase(
+        id="documents",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$documents": [{"x": 1}]}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$documents inside a $facet sub-pipeline should be rejected",
+    ),
+    # $currentOp only reaches the $facet restriction at database scope on the
+    # admin database. Against a collection, or any other database, it reports the
+    # namespace error instead, which is a different contract. docs=[] is required
+    # for target_collection to be resolved.
+    StageTestCase(
+        id="currentOp",
+        target_collection=ExistingDatabase(db_name="admin"),
+        docs=[],
+        pipeline=[{"$facet": {"a": [{"$currentOp": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$currentOp inside a $facet sub-pipeline should be rejected",
+        extra_command_fields={"aggregate": 1},
+    ),
+    # Only the error code is asserted for $changeStream because the server
+    # desugars the stage before the $facet check, so the message names an
+    # internal stage. Gated on change_streams because a target without them
+    # rejects it earlier for the topology, a different contract.
+    StageTestCase(
+        id="changeStream",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$changeStream": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$changeStream inside a $facet sub-pipeline should be rejected",
+        marks=(pytest.mark.requires(change_streams=True),),
     ),
     StageTestCase(
         id="valid_plus_forbidden",

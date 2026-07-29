@@ -431,6 +431,66 @@ FACET_SUBPIPELINE_STAGE_TESTS: list[StageTestCase] = [
         ],
         msg="$setWindowFields sub-pipeline should compute a running total over sorted documents",
     ),
+    # These docs carry a gap in t so $densify has something to bridge, unlike the
+    # shared DOCS whose prices are already contiguous.
+    StageTestCase(
+        id="densify",
+        docs=[{"_id": 1, "t": 0}, {"_id": 2, "t": 30}],
+        pipeline=[
+            {
+                "$facet": {
+                    "dense": [
+                        {"$densify": {"field": "t", "range": {"step": 10, "bounds": "full"}}}
+                    ],
+                    "total": [{"$count": "n"}],
+                }
+            }
+        ],
+        expected=[
+            {
+                "dense": [
+                    {"_id": 1, "t": 0},
+                    {"t": 10},
+                    {"t": 20},
+                    {"_id": 2, "t": 30},
+                ],
+                "total": [{"n": 2}],
+            }
+        ],
+        msg="$densify sub-pipeline should add the documents bridging the gap in the range",
+    ),
+    # The middle doc omits v so $fill has something to interpolate, unlike the
+    # shared DOCS where every doc has a price.
+    StageTestCase(
+        id="fill",
+        docs=[
+            {"_id": 1, "t": 0, "v": 10},
+            {"_id": 2, "t": 1},
+            {"_id": 3, "t": 2, "v": 30},
+        ],
+        pipeline=[
+            {
+                "$facet": {
+                    "filled": [
+                        {"$sort": {"_id": 1}},
+                        {"$fill": {"sortBy": {"t": 1}, "output": {"v": {"method": "linear"}}}},
+                    ],
+                    "total": [{"$count": "n"}],
+                }
+            }
+        ],
+        expected=[
+            {
+                "filled": [
+                    {"_id": 1, "t": 0, "v": 10},
+                    {"_id": 2, "t": 1, "v": 20.0},
+                    {"_id": 3, "t": 2, "v": 30},
+                ],
+                "total": [{"n": 3}],
+            }
+        ],
+        msg="$fill sub-pipeline should interpolate the missing value",
+    ),
 ]
 
 
