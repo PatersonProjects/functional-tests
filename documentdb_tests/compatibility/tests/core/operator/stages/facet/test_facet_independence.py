@@ -72,21 +72,6 @@ FACET_INDEPENDENCE_TESTS: list[StageTestCase] = [
         msg="A field added in one sub-pipeline must not leak into another sub-pipeline",
     ),
     StageTestCase(
-        id="sample_before_facet_shared_snapshot",
-        docs=DOCS,
-        pipeline=[
-            {"$sample": {"size": 10}},
-            {
-                "$facet": {
-                    "a": [{"$sort": {"_id": 1}}],
-                    "b": [{"$sort": {"_id": 1}}],
-                }
-            },
-        ],
-        expected=[{"a": DOCS, "b": DOCS}],
-        msg="$sample before $facet: both sub-pipelines receive the same document snapshot",
-    ),
-    StageTestCase(
         id="same_result_as_independent_pipelines",
         docs=DOCS,
         pipeline=[
@@ -111,8 +96,33 @@ FACET_INDEPENDENCE_TESTS: list[StageTestCase] = [
 ]
 
 
+# Property [Sub-Pipeline Independence]: a $sample before $facet is evaluated
+# once, so both sub-pipelines receive the same sampled documents. The sample
+# size stays below the document count so re-sampling would be detectable.
+FACET_SAMPLE_SNAPSHOT_TESTS: list[StageTestCase] = [
+    StageTestCase(
+        id="sample_before_facet_shared_snapshot",
+        docs=[{"_id": i, "cat": "A" if i % 2 else "B", "v": i} for i in range(1, 21)],
+        pipeline=[
+            {"$sample": {"size": 5}},
+            {
+                "$facet": {
+                    "a": [{"$sort": {"_id": 1}}],
+                    "b": [{"$sort": {"_id": 1}}],
+                }
+            },
+            {"$project": {"sampled": {"$size": "$a"}, "branchesMatch": {"$eq": ["$a", "$b"]}}},
+        ],
+        expected=[{"sampled": 5, "branchesMatch": True}],
+        msg="Both sub-pipelines must receive the same sampled documents from the snapshot",
+    ),
+]
+
+FACET_INDEPENDENCE_ALL_TESTS = FACET_INDEPENDENCE_TESTS + FACET_SAMPLE_SNAPSHOT_TESTS
+
+
 @pytest.mark.aggregate
-@pytest.mark.parametrize("test_case", pytest_params(FACET_INDEPENDENCE_TESTS))
+@pytest.mark.parametrize("test_case", pytest_params(FACET_INDEPENDENCE_ALL_TESTS))
 def test_facet_independence(collection, test_case: StageTestCase):
     """Test sub-pipeline independence of the $facet stage."""
     coll = populate_collection(collection, test_case)
