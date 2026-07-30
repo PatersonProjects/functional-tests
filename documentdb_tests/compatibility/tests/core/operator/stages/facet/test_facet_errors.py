@@ -336,6 +336,103 @@ FACET_FORBIDDEN_STAGE_TESTS: list[StageTestCase] = [
         msg="$listLocalSessions inside a $facet sub-pipeline should be rejected",
         extra_command_fields={"aggregate": 1},
     ),
+    StageTestCase(
+        id="changeStreamSplitLargeEvent",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$changeStreamSplitLargeEvent": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$changeStreamSplitLargeEvent inside a $facet sub-pipeline should be rejected",
+    ),
+    StageTestCase(
+        id="querySettings",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$querySettings": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$querySettings inside a $facet sub-pipeline should be rejected",
+    ),
+    # $listClusterCatalog reports a collection-level error at collection scope, so
+    # only the database-scoped form reaches the $facet restriction.
+    StageTestCase(
+        id="listClusterCatalog",
+        docs=[],
+        pipeline=[{"$facet": {"a": [{"$listClusterCatalog": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$listClusterCatalog inside a $facet sub-pipeline should be rejected",
+        extra_command_fields={"aggregate": 1},
+    ),
+    # $queryStats is admin-only, so like $currentOp it reports the namespace error
+    # anywhere else and only reaches the $facet restriction on admin.
+    StageTestCase(
+        id="queryStats",
+        target_collection=ExistingDatabase(db_name="admin"),
+        docs=[],
+        pipeline=[{"$facet": {"a": [{"$queryStats": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$queryStats inside a $facet sub-pipeline should be rejected",
+        extra_command_fields={"aggregate": 1},
+    ),
+    # $listSampledQueries needs the admin database to reach the $facet check, and
+    # cluster_admin because a target without it rejects the stage outright.
+    StageTestCase(
+        id="listSampledQueries",
+        target_collection=ExistingDatabase(db_name="admin"),
+        docs=[],
+        pipeline=[{"$facet": {"a": [{"$listSampledQueries": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$listSampledQueries inside a $facet sub-pipeline should be rejected",
+        extra_command_fields={"aggregate": 1},
+        marks=(pytest.mark.requires(cluster_admin=True),),
+    ),
+    # The search surfaces are gated on the search capability: without it the
+    # server rejects them before the $facet check, a different contract.
+    StageTestCase(
+        id="search",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$search": {"text": {"query": "x", "path": "cat"}}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$search inside a $facet sub-pipeline should be rejected",
+        marks=(pytest.mark.requires(search=True),),
+    ),
+    StageTestCase(
+        id="searchMeta",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$searchMeta": {"text": {"query": "x", "path": "cat"}}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$searchMeta inside a $facet sub-pipeline should be rejected",
+        marks=(pytest.mark.requires(search=True),),
+    ),
+    StageTestCase(
+        id="listSearchIndexes",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$listSearchIndexes": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$listSearchIndexes inside a $facet sub-pipeline should be rejected",
+        marks=(pytest.mark.requires(search=True),),
+    ),
+    StageTestCase(
+        id="vectorSearch",
+        docs=DOCS,
+        pipeline=[
+            {
+                "$facet": {
+                    "a": [
+                        {
+                            "$vectorSearch": {
+                                "index": "i",
+                                "path": "v",
+                                "queryVector": [1.0],
+                                "numCandidates": 10,
+                                "limit": 1,
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$vectorSearch inside a $facet sub-pipeline should be rejected",
+        marks=(pytest.mark.requires(search=True),),
+    ),
     # $documents is collectionless-only, so at collection scope it is rejected
     # for the $facet restriction rather than the namespace error it raises as a
     # top-level stage against a collection.
@@ -370,6 +467,21 @@ FACET_FORBIDDEN_STAGE_TESTS: list[StageTestCase] = [
         error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
         msg="$changeStream inside a $facet sub-pipeline should be rejected",
         marks=(pytest.mark.requires(change_streams=True),),
+    ),
+    StageTestCase(
+        id="listCatalog",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$listCatalog": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$listCatalog inside a $facet sub-pipeline should be rejected",
+    ),
+    StageTestCase(
+        id="searchBeta",
+        docs=DOCS,
+        pipeline=[{"$facet": {"a": [{"$searchBeta": {"text": {"query": "x", "path": "cat"}}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$searchBeta inside a $facet sub-pipeline should be rejected",
+        marks=(pytest.mark.requires(search=True),),
     ),
     StageTestCase(
         id="valid_plus_forbidden",
