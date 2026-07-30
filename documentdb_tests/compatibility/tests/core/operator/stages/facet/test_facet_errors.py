@@ -325,6 +325,17 @@ FACET_FORBIDDEN_STAGE_TESTS: list[StageTestCase] = [
         error_code=INVALID_NAMESPACE_ERROR,
         msg="$listSessions inside a $facet sub-pipeline should be rejected with 73",
     ),
+    # $listLocalSessions only reaches the $facet restriction at database scope.
+    # Against a collection it reports the namespace error instead, which is a
+    # different contract that the bare stage raises with no $facet involved.
+    StageTestCase(
+        id="listLocalSessions",
+        docs=[],
+        pipeline=[{"$facet": {"a": [{"$listLocalSessions": {}}]}}],
+        error_code=FACET_PIPELINE_INVALID_STAGE_ERROR,
+        msg="$listLocalSessions inside a $facet sub-pipeline should be rejected",
+        extra_command_fields={"aggregate": 1},
+    ),
     # $documents is collectionless-only, so at collection scope it is rejected
     # for the $facet restriction rather than the namespace error it raises as a
     # top-level stage against a collection.
